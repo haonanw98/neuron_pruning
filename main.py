@@ -162,18 +162,22 @@ def main_worker(args):
     )
 
     # Start training
+    prune_rate_record = args.prune_rate
     for epoch in range(args.start_epoch, args.epochs):
         lr_policy(epoch, iteration=None)
         modifier(args, epoch, model)
-
         cur_lr = get_lr(optimizer)
 
         # train for one epoch
         start_train = time.time()
         # WHN modeification add global pruning
         if args.pscale == "global":
-            assert (args.prune_rate < 1 - args.prune_protect_rate)
-            args.score_threshold = get_global_score_threshold(model, args.prune_rate, args.prune_protect_rate)
+            if args.gp_warm_up:
+                if epoch < args.gp_warm_up_epochs:
+                    args.prune_rate = 0
+                else:
+                    args.prune_rate = prune_rate_record
+            args.score_threshold = get_global_score_threshold(model, args.prune_rate)
         # end of modification WHN
         
         train_acc1, train_acc5 = train(
@@ -184,8 +188,6 @@ def main_worker(args):
         # WHN modeification add global pruning
         if args.pscale == "global":
             print_layerwise_prunerate(model, args.score_threshold)
-            if args.prune_rate > 0:
-                args.prune_protect_rate = max(args.prune_protect_rate - args.prune_protect_rate_decay, 0)
         # end of modification WHN
 
         # evaluate on validation set

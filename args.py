@@ -231,10 +231,12 @@ def parse_arguments():
         "--score_threshold", type=float, default=0, help="global pruning score threshold"
     )
     parser.add_argument(
-        "--prune_protect_rate", type=float, default=0.1, help="global pruning protection"
+            '--gp_warm_up', dest='gp_warm_up', action='store_true'
     )
+    parser.set_defaults(gp_warm_up=False)
+
     parser.add_argument(
-        "--prune_protect_rate_decay", type=float, default=0.01, help="global pruning protection rate decay"
+        "--gp_warm_up_epochs", type=int, default=20, help="global pruning protection rate decay"
     )
     # End of WHN modification
     # SJT modification :

@@ -12,15 +12,10 @@ from args import args as parser_args
 def print_layerwise_prunerate(model, score_threshold):
     pass
 
-def select_partial_score(scores, prune_protect_rate):
-    if prune_protect_rate == 0:
-        return scores
-    else:
-        sorted_scores, idx = scores.sort()
-        length = int(scores.numel() * prune_protect_rate)
-    return sorted_scores[ : length]
 
-def get_global_score_threshold(model, prune_rate, prune_protect_rate):
+def get_global_score_threshold(model, prune_rate):
+    if prune_rate == 0:
+        return 0
     all_scores = None
     for n, m in model.named_modules():
         if hasattr(m, "scores"):
@@ -29,19 +24,13 @@ def get_global_score_threshold(model, prune_rate, prune_protect_rate):
                 all_scores = tensor([]).to(m.scores.device)
             
             if parser_args.pmode == "normal":
-                scores = select_partial_score(m.scores.abs().flatten(), args.prune_protect_rate)
-                all_scores = torch.cat([all_scores, scores])
+                all_scores = torch.cat([all_scores, m.scores.abs().flatten()])
             
-            elif parser_args.pmode == "channel" or (shape[2] == 1 and shape[3] == 1):
+            elif parser_args.pmode == "channel":
                 channel_size = shape[1] * shape[2] * shape[3]
-                scores = select_partial_score(m.scores.abs().sum((1, 2, 3)).flatten() / channel_size, prune_protect_rate)
-                all_scores = torch.cat([all_scores, scores])
+                all_scores = torch.cat([all_scores, m.scores.abs().sum((1, 2, 3)).flatten() / channel_size])
             
-            elif parser_args.pmode == "filter":
-                filter_size = shape[2] * shape[3]
-                scores = select_partial_score(m.scores.abs().sum((2, 3)).flatten() / filter_size, prune_protect_rate)
-                all_scores = torch.cat([all_scores, scores]) 
-    return torch.kthvalue(all_scores, int((prune_rate / (1 - prune_protect_rate)) * all_scores.numel())).values.item()
+    return torch.kthvalue(all_scores, int(prune_rate * all_scores.numel())).values.item()
    
 def save_checkpoint(state, is_best, filename="checkpoint.pth", save=False):
     filename = pathlib.Path(filename)
