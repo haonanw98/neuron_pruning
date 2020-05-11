@@ -19,7 +19,7 @@ class GetSubnet(autograd.Function):
         out = scores.clone()
         shape = scores.shape
         # WHN modification
-        pmode, pscale, score_threshold = parser_args.pmode, parser_args.pscale, parser_args.score_threshold
+        pmode , pscale, score_threshold = parser_args.pmode, parser_args.pscale, parser_args.score_threshold
         if pmode == "normal" and pscale == "layerwise":
             _, idx = scores.flatten().sort()
             j = int(k * scores.numel())
@@ -49,7 +49,8 @@ class GetSubnet(autograd.Function):
             flat_out = out.flatten().reshape(channel_num, -1)
             flat_out[flat_out != 0] = 0
             flat_out[idx] = 1
-        
+
+            
         else:
             print("Unexpected pruning type.")
             raise 
@@ -78,7 +79,6 @@ class SubnetConv(nn.Conv2d):
 
     def forward(self, x):
         subnet = GetSubnet.apply(self.clamped_scores, self.prune_rate)
-        # print(torch.sum(subnet), self.weight.flatten().size())
         w = self.weight * subnet
         x = F.conv2d(
             x, w, self.bias, self.stride, self.padding, self.dilation, self.groups

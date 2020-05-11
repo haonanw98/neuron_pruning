@@ -5,6 +5,7 @@ arch: Conv4
 data: datasets/
 set: CIFAR10
 name: 3step_layernormal
+pscale: layerwise
 
 # ===== Learning Rate Policy ======== #
 optimizer: sgd

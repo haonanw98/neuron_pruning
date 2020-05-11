@@ -9,27 +9,21 @@ import torch.nn as nn
 import torch.tensor as tensor
 
 from args import args as parser_args
-def print_layerwise_prunerate(model, score_threshold):
-    pass
-
 
 def get_global_score_threshold(model, prune_rate):
+    all_scores = None
     if prune_rate == 0:
         return 0
-    all_scores = None
     for n, m in model.named_modules():
         if hasattr(m, "scores"):
             shape = m.scores.shape
             if all_scores is None:
                 all_scores = tensor([]).to(m.scores.device)
-            
             if parser_args.pmode == "normal":
-                all_scores = torch.cat([all_scores, m.scores.abs().flatten()])
-            
+                all_scores = torch.cat([all_scores, m.scores.flatten().abs()])
             elif parser_args.pmode == "channel":
                 channel_size = shape[1] * shape[2] * shape[3]
                 all_scores = torch.cat([all_scores, m.scores.abs().sum((1, 2, 3)).flatten() / channel_size])
-            
     return torch.kthvalue(all_scores, int(prune_rate * all_scores.numel())).values.item()
    
 def save_checkpoint(state, is_best, filename="checkpoint.pth", save=False):

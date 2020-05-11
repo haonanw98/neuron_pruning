@@ -1,6 +1,6 @@
-### Neuron Pruning Specification
+### Neuron Pruning Specification-ver4
 
-Date: May 7th noon
+Date: May 11th aternoon
 
 To-do: adding global pruning method.
 
@@ -25,7 +25,7 @@ python main.py --exp_mode pruning --config pretraining_cfg_file.yaml --resume pe
 **Fine-tune**:
 
 ~~~
-python main.py --exp_mode finetuning --config pretraining_cfg_file.yaml --resume pruned_model_dir --epochs #epoch(recommend:~20) --lr 0.01 --multigpu gpu_form --name thesamename
+python main.py --exp_mode finetuning --config pretraining_cfg_file.yaml --resume pruned_model_dir --epochs #epoch(recommend:~20) --lr 0.01 --multigpu gpu_form --name thesamename --prune-rate k(identical to prune process!!!)
 ~~~
 
 ​		Remember, the config "name" should be the same during the whole process, and the program will automatically add prefix to help you specify step.

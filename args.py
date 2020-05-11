@@ -231,10 +231,9 @@ def parse_arguments():
         "--score_threshold", type=float, default=0, help="global pruning score threshold"
     )
     parser.add_argument(
-            '--gp_warm_up', dest='gp_warm_up', action='store_true'
+        '--gp_warm_up', dest='gp_warm_up', action='store_true'
     )
     parser.set_defaults(gp_warm_up=False)
-
     parser.add_argument(
         "--gp_warm_up_epochs", type=int, default=20, help="global pruning protection rate decay"
     )

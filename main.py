@@ -27,7 +27,6 @@ from utils.net_utils import (
     get_lr,
     LabelSmoothing,
     get_global_score_threshold,  # WHN modification
-    print_layerwise_prunerate,   # WHN modification
 )
 from utils.schedulers import get_policy
 
@@ -51,8 +50,9 @@ def main():
         if args.shuffle:
             print("Using shuffle mode without specify argd.seed!")
             return
+    
     # End of YHT modification
-
+    
     # Simply call main_worker function
     main_worker(args)
 
@@ -154,18 +154,20 @@ def main_worker(args):
             "best_train_acc5": best_train_acc5,
             "optimizer": optimizer.state_dict(),
             "curr_acc1": acc1 if acc1 else "Not evaluated",
-            "prune-rate": args.prune_rate,
         },
         False,
         filename=ckpt_base_dir / f"initial.state",
         save=False,
     )
 
+    if args.gp_warm_up:
+        record_prune_rate = args.prune_rate
+
     # Start training
-    prune_rate_record = args.prune_rate
     for epoch in range(args.start_epoch, args.epochs):
         lr_policy(epoch, iteration=None)
         modifier(args, epoch, model)
+
         cur_lr = get_lr(optimizer)
 
         # train for one epoch
@@ -173,22 +175,15 @@ def main_worker(args):
         # WHN modeification add global pruning
         if args.pscale == "global":
             if args.gp_warm_up:
-                if epoch < args.gp_warm_up_epochs:
+                if epoch < args.gp_warm_up_epoch:
                     args.prune_rate = 0
                 else:
-                    args.prune_rate = prune_rate_record
+                    args.prune_rate = record_prune_rate
             args.score_threshold = get_global_score_threshold(model, args.prune_rate)
-        # end of modification WHN
-        
         train_acc1, train_acc5 = train(
             data.train_loader, model, criterion, optimizer, epoch, args, writer=writer
         )
         train_time.update((time.time() - start_train) / 60)
-
-        # WHN modeification add global pruning
-        if args.pscale == "global":
-            print_layerwise_prunerate(model, args.score_threshold)
-        # end of modification WHN
 
         # evaluate on validation set
         start_validation = time.time()
@@ -224,7 +219,6 @@ def main_worker(args):
                     "optimizer": optimizer.state_dict(),
                     "curr_acc1": acc1,
                     "curr_acc5": acc5,
-                    "prune-rate": args.prune_rate,
                 },
                 is_best,
                 filename=ckpt_base_dir / f"epoch_{epoch}.state",
@@ -370,8 +364,6 @@ def resume_finetuning(args,model):
         print(f"=> Loading checkpoint '{args.resume}'")
         checkpoint = torch.load(args.resume, map_location=f"cuda:{args.multigpu[0]}")    
         model.load_state_dict(checkpoint["state_dict"])
-        # Use the solved prune-rate in the .pth file
-        args.prune_rate = checkpoint["prune-rate"]
         # Freeze the weights & unfreeze the scores
         unfreeze_model_weights(model)
         freeze_model_subnet(model)
