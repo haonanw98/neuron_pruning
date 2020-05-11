@@ -9,6 +9,32 @@ import torch.nn as nn
 import torch.tensor as tensor
 
 from args import args as parser_args
+def print_global_layerwise_prune_rate(model, prune_rate):
+    score_threshold = get_global_score_threshold(model, prune_rate)
+    for n, m in model.named_modules():
+        if hasattr(m, "scores"):
+            shape = m.scores.shape
+            if parser_args.pmode == "normal":
+                scores = m.scores.abs().flatten()
+                pruned_num = sum(scores <= score_threshold).item()
+                total_num = scores.shape[0]
+                print(n, " pruned: ", pruned_num, " total: ", total_num, " rate: ", pruned_num / total_num)
+            elif parser_args.pmode == "channel":
+                channel_size = shape[1] * shape[2] * shape[3]
+                scores = m.scores.abs().sum((1, 2, 3)).flatten()
+                pruned_num = (scores <= score_threshold).item() * channel_size
+                total_num = scores.shape[0] * channel_size
+                print(n, " pruned: ", pruned_num, " total: ", total_num, " rate: ", pruned_num / total_num)
+        else:
+            print(n)
+
+def print_model_scores(model):
+    for n, m in model.named_modules():
+        if hasattr(m, "scores"):
+            print(n, "scores:", m.scores)
+
+
+
 
 def get_global_score_threshold(model, prune_rate):
     all_scores = None
@@ -20,7 +46,7 @@ def get_global_score_threshold(model, prune_rate):
             if all_scores is None:
                 all_scores = tensor([]).to(m.scores.device)
             if parser_args.pmode == "normal":
-                all_scores = torch.cat([all_scores, m.scores.flatten().abs()])
+                all_scores = torch.cat([all_scores, m.scores.abs().flatten()])
             elif parser_args.pmode == "channel":
                 channel_size = shape[1] * shape[2] * shape[3]
                 all_scores = torch.cat([all_scores, m.scores.abs().sum((1, 2, 3)).flatten() / channel_size])

@@ -27,6 +27,7 @@ from utils.net_utils import (
     get_lr,
     LabelSmoothing,
     get_global_score_threshold,  # WHN modification
+    print_global_layerwise_prune_rate, # WHN modification
 )
 from utils.schedulers import get_policy
 
@@ -175,15 +176,19 @@ def main_worker(args):
         # WHN modeification add global pruning
         if args.pscale == "global":
             if args.gp_warm_up:
-                if epoch < args.gp_warm_up_epoch:
+                if epoch < args.gp_warm_up_epochs:
                     args.prune_rate = 0
                 else:
                     args.prune_rate = record_prune_rate
             args.score_threshold = get_global_score_threshold(model, args.prune_rate)
+        
         train_acc1, train_acc5 = train(
             data.train_loader, model, criterion, optimizer, epoch, args, writer=writer
         )
         train_time.update((time.time() - start_train) / 60)
+        
+        if args.pscale == "global":
+            print_global_layerwise_prune_rate(model, args.prune_rate)
 
         # evaluate on validation set
         start_validation = time.time()

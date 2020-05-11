@@ -49,7 +49,6 @@ class GetSubnet(autograd.Function):
             flat_out = out.flatten().reshape(channel_num, -1)
             flat_out[flat_out != 0] = 0
             flat_out[idx] = 1
-
             
         else:
             print("Unexpected pruning type.")
