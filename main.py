@@ -181,6 +181,8 @@ def main_worker(args):
                 else:
                     args.prune_rate = record_prune_rate
             args.score_threshold = get_global_score_threshold(model, args.prune_rate)
+            print("**************", args.score_threshold, "***********************")
+        print("prate", args.prune_rate)
         
         train_acc1, train_acc5 = train(
             data.train_loader, model, criterion, optimizer, epoch, args, writer=writer
@@ -197,6 +199,7 @@ def main_worker(args):
             acc1, acc5 = validate(data.val_loader, model, criterion, args, writer, epoch)
 
         validation_time.update((time.time() - start_validation) / 60)
+        print_global_layerwise_prune_rate(model, args.prune_rate)
 
         # remember best acc@1 and save checkpoint
         is_best = acc1 > best_acc1

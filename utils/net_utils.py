@@ -21,8 +21,8 @@ def print_global_layerwise_prune_rate(model, prune_rate):
                 print(n, " pruned: ", pruned_num, " total: ", total_num, " rate: ", pruned_num / total_num)
             elif parser_args.pmode == "channel":
                 channel_size = shape[1] * shape[2] * shape[3]
-                scores = m.scores.abs().sum((1, 2, 3)).flatten()
-                pruned_num = (scores <= score_threshold).item() * channel_size
+                scores = m.scores.abs().sum((1, 2, 3)).flatten() / channel_size
+                pruned_num = sum(scores <= score_threshold).item() * channel_size
                 total_num = scores.shape[0] * channel_size
                 print(n, " pruned: ", pruned_num, " total: ", total_num, " rate: ", pruned_num / total_num)
         else:
