@@ -46,9 +46,15 @@ python main.py --exp_mode finetuning --config pretraining_cfg_file.yaml --resume
 
 **Prune Method**:
 
-​		Six pruning methods are available, including global and layer-wise pruning, and 3 method of each. The default mode is "layer-wise" and "normal" which is exactly the same as hidden code. If you want to change it, consider
+​		Four pruning methods are available, including global and layer-wise pruning, and 2 method of each. The default mode is "layer-wise" and "normal" which is exactly the same as hidden code. If you want to change it, consider
 
 ```
 --pmode normal/filter/channel  --pscale layerwise/global(this is not supported yet)
+
+
+​		For the global pruning, to avoid the situation that all the channels in a layer will be prune after the initialization, consider warmup
+
+--gp_warm_up --gp_warm_up_epoch 
+      
 ```
 
