@@ -187,8 +187,6 @@ def main_worker(args):
         )
         train_time.update((time.time() - start_train) / 60)
         
-        if args.pscale == "global":
-            print_global_layerwise_prune_rate(model, args.prune_rate)
 
         # evaluate on validation set
         start_validation = time.time()
