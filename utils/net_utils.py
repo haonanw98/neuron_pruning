@@ -11,18 +11,28 @@ import torch.tensor as tensor
 from args import args as parser_args
 def print_global_layerwise_prune_rate(model, prune_rate):
     score_threshold = get_global_score_threshold(model, prune_rate)
+    print("rank_method: ",parser_args.rank_method,";whether_abs: ",parser_args.whether_abs)
+    print("score_threshold: ",score_threshold)
     for n, m in model.named_modules():
         if hasattr(m, "scores"):
             shape = m.scores.shape
             if parser_args.pmode == "normal":
                 scores = m.scores.abs().flatten()
-                pruned_num = sum(scores <= score_threshold).item()
+                pruned_num = scores[scores <= score_threshold].size()[0]
                 total_num = scores.shape[0]
                 print(n, " pruned: ", pruned_num, " total: ", total_num, " rate: ", pruned_num / total_num)
             elif parser_args.pmode == "channel":
                 channel_size = shape[1] * shape[2] * shape[3]
-                scores = m.scores.abs().sum((1, 2, 3)).flatten() / channel_size
-                pruned_num = sum(scores <= score_threshold).item() * channel_size
+                if parser_args.rank_method == "absolute":
+                    scores = m.scores.abs().sum((1, 2, 3)).flatten() / channel_size
+                elif parser_args.rank_method == "relevant":
+                    if parser_args.whether_abs == "abs":
+
+                        scores = torch.div(m.scores.abs().sum((1,2,3)).flatten(),m.sumofabsofinit.cuda())
+                    else:
+                        scores = torch.div(m.scores.sum((1,2,3)).flatten(),m.sumofabsofinit.cuda())
+                #print(scores)
+                pruned_num = scores[scores < score_threshold].size()[0] * channel_size
                 total_num = scores.shape[0] * channel_size
                 print(n, " pruned: ", pruned_num, " total: ", total_num, " rate: ", pruned_num / total_num)
         else:
@@ -33,24 +43,37 @@ def print_model_scores(model):
         if hasattr(m, "scores"):
             print(n, "scores:", m.scores)
 
-
-
-
 def get_global_score_threshold(model, prune_rate):
     all_scores = None
     if prune_rate == 0:
-        return 0
+        # YHT modification, since I delete abs, 0 no longer make sense
+        return -10000
+    # YHT modification 
     for n, m in model.named_modules():
         if hasattr(m, "scores"):
             shape = m.scores.shape
             if all_scores is None:
                 all_scores = tensor([]).to(m.scores.device)
-            if parser_args.pmode == "normal":
-                all_scores = torch.cat([all_scores, m.scores.abs().flatten()])
-            elif parser_args.pmode == "channel":
+            if parser_args.rank_method == "absolute":
+                if parser_args.pmode == "normal":
+                    all_scores = torch.cat([all_scores, m.scores.abs().flatten()])
+                elif parser_args.pmode == "channel":
+                    channel_size = shape[1] * shape[2] * shape[3]
+                    all_scores = torch.cat([all_scores, m.scores.abs().sum((1, 2, 3)).flatten() / channel_size])
+            elif parser_args.rank_method == "relevant":
+                assert parser_args.pmode == "channel","only channel pmode could use relevant method!"
                 channel_size = shape[1] * shape[2] * shape[3]
-                all_scores = torch.cat([all_scores, m.scores.abs().sum((1, 2, 3)).flatten() / channel_size])
+                # noabs / abs of init
+                if parser_args.whether_abs == "abs":
+                    attach = torch.div(m.scores.abs().sum((1,2,3)).flatten(), m.sumofabsofinit.cuda())
+                else:
+                    attach = torch.div(m.scores.sum((1,2,3)).flatten(), m.sumofabsofinit.cuda())
+                all_scores = torch.cat([all_scores,attach])
+            else:
+                print("wrong rank_method! Only absolute and relevant is supported.")
+                raise
     return torch.kthvalue(all_scores, int(prune_rate * all_scores.numel())).values.item()
+    # End of modification
    
 def save_checkpoint(state, is_best, filename="checkpoint.pth", save=False):
     filename = pathlib.Path(filename)

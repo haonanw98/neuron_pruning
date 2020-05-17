@@ -1,14 +1,16 @@
 # Architecture
-arch: Conv4Wide
+arch: Conv8
 
 # ===== Dataset ===== #
-data: /mnt
+data: datasets/
 set: CIFAR10
-name: conv4wide_sgd_baseline
+name: conv8_globalnormal
+pscale: global
+pmode: normal
 
 # ===== Learning Rate Policy ======== #
 optimizer: sgd
-lr: 0.01
+lr: 0.1
 lr_policy: cosine_lr
 
 # ===== Network training config ===== #
@@ -18,9 +20,12 @@ momentum: 0.9
 batch_size: 128
 
 # ===== Sparsity =========== #
-conv_type: DenseConv
+conv_type: SubnetConv
 bn_type: NonAffineBatchNorm
-width_mult: 1
+freeze_weights: True
+prune_rate: -1
+init: xavier_normal
+# scale_fan: True
 
 # ===== Hardware setup ===== #
 workers: 4

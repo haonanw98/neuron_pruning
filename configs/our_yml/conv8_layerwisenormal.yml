@@ -1,11 +1,12 @@
 # Architecture
-arch: Conv4
+arch: Conv8
 
 # ===== Dataset ===== #
 data: datasets/
 set: CIFAR10
-name: 3step_layernormal
+name: conv8_layernormal
 pscale: layerwise
+pmode: normal
 
 # ===== Learning Rate Policy ======== #
 optimizer: sgd

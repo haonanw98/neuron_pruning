@@ -163,7 +163,8 @@ def main_worker(args):
 
     if args.gp_warm_up:
         record_prune_rate = args.prune_rate
-
+    if args.print_more:
+        print_global_layerwise_prune_rate(model,args.prune_rate)
     # Start training
     for epoch in range(args.start_epoch, args.epochs):
         lr_policy(epoch, iteration=None)
@@ -187,6 +188,10 @@ def main_worker(args):
         )
         train_time.update((time.time() - start_train) / 60)
         
+        # YHT modification
+        if args.print_more:
+            print_global_layerwise_prune_rate(model,args.prune_rate)
+        # End of modification
 
         # evaluate on validation set
         start_validation = time.time()
@@ -197,7 +202,6 @@ def main_worker(args):
             acc1, acc5 = validate(data.val_loader, model, criterion, args, writer, epoch)
 
         validation_time.update((time.time() - start_validation) / 60)
-        print_global_layerwise_prune_rate(model, args.prune_rate)
 
         # remember best acc@1 and save checkpoint
         is_best = acc1 > best_acc1

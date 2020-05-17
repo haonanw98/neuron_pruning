@@ -10,27 +10,29 @@ from args import args as parser_args
 
 DenseConv = nn.Conv2d
 
+
 class GetSubnet(autograd.Function):
     @staticmethod
-    def forward(ctx, scores, k):
+    def forward(ctx, noabs_scores, k, sumofinit):
         # Get the subnetwork by sorting the scores and using the top k%
-
+        scores = noabs_scores.abs()
         # flat_out and out access the same memory.
         out = scores.clone()
         shape = scores.shape
         # WHN modification
-        pmode , pscale, score_threshold = parser_args.pmode, parser_args.pscale, parser_args.score_threshold
+        pmode, pscale, score_threshold = parser_args.pmode, parser_args.pscale, parser_args.score_threshold
         if pmode == "normal" and pscale == "layerwise":
             _, idx = scores.flatten().sort()
             j = int(k * scores.numel())
             flat_out = out.flatten()
             flat_out[idx[:j]] = 0
             flat_out[idx[j:]] = 1
-        
+
         elif pmode == "channel" and pscale == "layerwise":
             channel_num = shape[0]
             channel_size = shape[1] * shape[2] * shape[3]
-            _, idx = scores.sum((1, 2, 3)).flatten().sort()  # get sum for each channel
+            # get sum for each channel
+            _, idx = scores.sum((1, 2, 3)).flatten().sort()
             j = int(k * scores.sum((1, 2, 3)).numel())
             flat_out = out.flatten().reshape(channel_num, -1)
             flat_out[idx[:j]] = 0
@@ -41,33 +43,59 @@ class GetSubnet(autograd.Function):
             idx = scores.flatten() > score_threshold
             flat_out[flat_out != 0] = 0
             flat_out[idx] = 1
- 
+
         elif pmode == "channel" and pscale == "global":
             channel_num = shape[0]
             channel_size = shape[1] * shape[2] * shape[3]
-            idx = (scores.sum((1, 2, 3)).flatten() / channel_size) > score_threshold 
+            # YHT modification
+            if parser_args.rank_method == "absolute":
+                idx = (scores.sum((1, 2, 3)).flatten() /
+                       channel_size) > score_threshold
+            elif parser_args.rank_method == "relevant":
+                if parser_args.whether_abs == "abs":
+                    idx = torch.div(scores.sum((1, 2, 3)).flatten(),
+                                    sumofinit.cuda()) >= score_threshold
+                else:
+                    idx = torch.div(noabs_scores.sum(
+                        (1, 2, 3)).flatten(), sumofinit.cuda()) >= score_threshold
+            # End of modification
             flat_out = out.flatten().reshape(channel_num, -1)
             flat_out[flat_out != 0] = 0
             flat_out[idx] = 1
-            
+
         else:
             print("Unexpected pruning type.")
-            raise 
+            raise
         # End of WHN modification
         return out
 
     @staticmethod
     def backward(ctx, g):
         # send the gradient g straight-through on the backward pass.
-        return g, None
+        return g, None, None
 
 # Not learning weights, finding subnet
+
+
 class SubnetConv(nn.Conv2d):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.scores = nn.Parameter(torch.Tensor(self.weight.size()))
-        nn.init.kaiming_uniform_(self.scores, a=math.sqrt(5))
+        # YHT modification
+        if parser_args.score_init == "kaiming":
+            nn.init.kaiming_uniform_(self.scores, a=math.sqrt(5))
+        elif parser_args.score_init == "normal":
+            nn.init.uniform_(self.scores)
+        elif parser_args.score_init == "gaussian":
+            nn.init.normal_(self.scores)
+        else:
+            print("unkown type of score_init!")
+            raise
+        # adding anotehr init_score which is used to compare RELEVANT scaling
+        self.init_scores = nn.Parameter(self.scores, requires_grad=False)
+        self.sumofabsofinit = self.init_scores.abs().sum((1, 2, 3)).flatten()
+        # End of modification
 
     def set_prune_rate(self, prune_rate):
         self.prune_rate = prune_rate
@@ -76,13 +104,23 @@ class SubnetConv(nn.Conv2d):
     def clamped_scores(self):
         return self.scores.abs()
 
+    # YHT modification
+    @property
+    def clamped_sumofinit(self):
+        return self.sumofabsofinit
+    # End of modification
+
     def forward(self, x):
-        subnet = GetSubnet.apply(self.clamped_scores, self.prune_rate)
+        # YHT modification
+        subnet = GetSubnet.apply(
+            self.scores, self.prune_rate, self.clamped_sumofinit)
+        # YHT modification
         w = self.weight * subnet
         x = F.conv2d(
             x, w, self.bias, self.stride, self.padding, self.dilation, self.groups
         )
         return x
+
 
 """
 Sample Based Sparsification
@@ -183,4 +221,3 @@ class FixedSubnetConv(nn.Conv2d):
             x, w, self.bias, self.stride, self.padding, self.dilation, self.groups
         )
         return x
-

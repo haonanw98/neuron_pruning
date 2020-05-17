@@ -1,13 +1,44 @@
-### Neuron Pruning Specification-ver4
+### Neuron Pruning Specification-ver5
 
-Date: May 11th aternoon
+Date: May 16th aternoon
 
-To-do: adding global pruning method.
+To-do: 轮子 of random drop
+
+#### Convenient Usage for Conv4/8
+
+**Pretrain**:
+
+```
+python main.py --exp_mode pretraining --config configs/our_yml/conv4_globalchannel.yml --multigpu 0
+```
+
+**Pruning**：
+
+```
+python main.py --exp_mode pruning --config configs/our_yml/conv4_globalchannel.yml --multigpu 0 --epochs 50 --resume your_pretrain_pth --prune-rate k
+```
+
+**Fine-tune**:
+
+```
+python main.py --exp_mode finetuning --config configs/our_yml/conv4)globalchannel.yml --multigpu 0 --epochs 50 --lr 0.01 --resume your_pruning_pth --prune-rate k
+```
+
+
 
 #### Standard Usage
 
 ​		Our pruning is a three-step designs. You need to pretrain a network, then prune several neurons, and fine-tune it. During the process, several configs should be identical, i.e. numbers of GPU, prune-rate(which you should only specify in prune process), config_file.
 
+​		**New usage：**
+
+​				you can decide which method to use when ranking scores. Default is absolute, which is identical to  hidden's code, simply  calculating the average of weights. The other is relevant, which calculates the ratio of scores with init score. If relevant type is used, then the second command you  could control is whether_abs, which means：
+$$
+\begin{align}
+\text{relevant,abs} &\quad \text{score$_\text{neuron}$} = \frac{\sum |\text{weight score}|}{\sum |\text{init score}|}\\
+\text{relevant,noabs} &\quad \text{score$_\text{neuron}$} = \frac{\sum \text{weight score}}{\sum |\text{init score}|}\\
+\end{align}
+$$
 ​		A standard usage is as follows:
 
 **Pretrain** : 
@@ -19,13 +50,13 @@ python main.py --exp_mode pretraining --config config_file.yaml --multigpu gpu_f
 **Prune**:
 
 ~~~
-python main.py --exp_mode pruning --config pretraining_cfg_file.yaml --resume pertained_model_dir --prune-rate k --epochs #epoch(recommend:~20) --multigpu gpu_form --name thesamename
+python main.py --exp_mode pruning -epochs #epoch(recommend:~50) --config pretraining_cfg_file.yaml --name thesamename --resume pertained_model_dir --pmode yourmode [--rank_method relevant --whether_abs noabs]  --prune-rate k  --multigpu gpu_form 
 ~~~
 
 **Fine-tune**:
 
 ~~~
-python main.py --exp_mode finetuning --config pretraining_cfg_file.yaml --resume pruned_model_dir --epochs #epoch(recommend:~20) --lr 0.01 --multigpu gpu_form --name thesamename --prune-rate k(identical to prune process!!!)
+python main.py --exp_mode finetuning --config pretraining_cfg_file.yaml --epochs #epoch(recommend:~50) --lr 0.01 --name thesamename --resume pruned_model_dir --pmode yourmode [--rank_method relevant --whether_abs noabs] --multigpu gpu_form  --prune-rate k(identical to prune process!!!)
 ~~~
 
 ​		Remember, the config "name" should be the same during the whole process, and the program will automatically add prefix to help you specify step.
@@ -49,7 +80,7 @@ python main.py --exp_mode finetuning --config pretraining_cfg_file.yaml --resume
 ​		Four pruning methods are available, including global and layer-wise pruning, and 2 method of each. The default mode is "layer-wise" and "normal" which is exactly the same as hidden code. If you want to change it, consider
 
 ```
---pmode normal/filter/channel  --pscale layerwise/global(this is not supported yet)
+--pmode normal/filter/channel  --pscale layerwise/global
 
 
 ​		For the global pruning, to avoid the situation that all the channels in a layer will be prune after the initialization, consider warmup

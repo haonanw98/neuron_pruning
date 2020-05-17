@@ -4,8 +4,11 @@ arch: Conv4
 # ===== Dataset ===== #
 data: datasets/
 set: CIFAR10
-name: 3step_layernormal
+name: conv4_globalchannel
 pscale: global
+pmode: channel
+rank_method: relevant
+whether_abs: nobas
 
 # ===== Learning Rate Policy ======== #
 optimizer: sgd

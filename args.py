@@ -243,6 +243,20 @@ def parse_arguments():
         "--exp_mode", help = "experiment mode: pretraining, pruning or finetuning", default = None
     )
     # End of SJT modification
+    # YHT modification:
+    parser.add_argument(
+        '--print_more', dest='print_more', action='store_true'
+    )
+    parser.add_argument(
+        "--score_init", help = "how u init score: kaiming(default), uniform, gaussian", default = "kaiming"
+    )
+    parser.add_argument(
+        "--rank_method", help = "how u rank score: absolute(default) or relevant to init", default = "absolute"
+    )
+    parser.add_argument(
+        "--whether_abs", help = "whether use abs of scores: abs(default) or noabs", default = "abs"
+    )
+    # End of modification
 
     args = parser.parse_args()
 
