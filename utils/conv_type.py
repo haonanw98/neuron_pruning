@@ -20,8 +20,22 @@ class GetSubnet(autograd.Function):
         out = scores.clone()
         shape = scores.shape
         # WHN modification
-        pmode, pscale, score_threshold = parser_args.pmode, parser_args.pscale, parser_args.score_threshold
-        if pmode == "normal" and pscale == "layerwise":
+        pmode, pscale, score_threshold, prandom= parser_args.pmode, parser_args.pscale, parser_args.score_threshold, parser_args.prandom
+        if k == 0:
+            flat_out = out.flatten()
+            flat_out.fill_(1)
+
+        elif prandom == True:
+            # notice that when prandom is true, only layerwise channel prune is available, and each layer prune rate is not equal
+            channel_num = shape[0]
+            channel_size = shape[1] * shape[2] * shape[3]
+            idx = torch.randperm(channel_num)
+            j = int(k * scores.sum((1, 2, 3)).numel())
+            flat_out = out.flatten().reshape(channel_num, -1)
+            flat_out[idx[:j]] = 0
+            flat_out[idx[j:]] = 1
+            
+        elif pmode == "normal" and pscale == "layerwise":
             _, idx = scores.flatten().sort()
             j = int(k * scores.numel())
             flat_out = out.flatten()
@@ -80,7 +94,6 @@ class GetSubnet(autograd.Function):
 class SubnetConv(nn.Conv2d):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         self.scores = nn.Parameter(torch.Tensor(self.weight.size()))
         # YHT modification
         if parser_args.score_init == "kaiming":

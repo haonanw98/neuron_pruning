@@ -89,3 +89,11 @@ python main.py --exp_mode finetuning --config pretraining_cfg_file.yaml --epochs
       
 ```
 
+random prunning is now available use --prandom to randomly prunning each layer
+
+set fix prune rate for each layer is available under random prunning, please use --prlist to set the prune rate. set prune rate like this:
+    --prlist 0.1 0.2 ...  Remember that if the length for the prlist is not enough, other prune rate will be same as prune-rate
+
+protect is also available: --protect "linear"/ "linear\_last". Notice that there are some bugs here(not available for resnet and vgg yet).
+
+

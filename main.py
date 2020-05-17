@@ -169,9 +169,7 @@ def main_worker(args):
     for epoch in range(args.start_epoch, args.epochs):
         lr_policy(epoch, iteration=None)
         modifier(args, epoch, model)
-
         cur_lr = get_lr(optimizer)
-
         # train for one epoch
         start_train = time.time()
         # WHN modeification add global pruning
@@ -183,15 +181,15 @@ def main_worker(args):
                     args.prune_rate = record_prune_rate
             args.score_threshold = get_global_score_threshold(model, args.prune_rate)
         
+        # YHT modification
+        if args.print_more:
+            print_global_layerwise_prune_rate(model, args.prune_rate)
+        # End of modification
+        
         train_acc1, train_acc5 = train(
             data.train_loader, model, criterion, optimizer, epoch, args, writer=writer
         )
         train_time.update((time.time() - start_train) / 60)
-        
-        # YHT modification
-        if args.print_more:
-            print_global_layerwise_prune_rate(model,args.prune_rate)
-        # End of modification
 
         # evaluate on validation set
         start_validation = time.time()

@@ -9,12 +9,14 @@ import torch.nn as nn
 import torch.tensor as tensor
 
 from args import args as parser_args
+import pdb
+
 def print_global_layerwise_prune_rate(model, prune_rate):
     score_threshold = get_global_score_threshold(model, prune_rate)
     print("rank_method: ",parser_args.rank_method,";whether_abs: ",parser_args.whether_abs)
     print("score_threshold: ",score_threshold)
     for n, m in model.named_modules():
-        if hasattr(m, "scores"):
+        if hasattr(m, "scores") and m.prune_rate != 0:
             shape = m.scores.shape
             if parser_args.pmode == "normal":
                 scores = m.scores.abs().flatten()
@@ -27,7 +29,6 @@ def print_global_layerwise_prune_rate(model, prune_rate):
                     scores = m.scores.abs().sum((1, 2, 3)).flatten() / channel_size
                 elif parser_args.rank_method == "relevant":
                     if parser_args.whether_abs == "abs":
-
                         scores = torch.div(m.scores.abs().sum((1,2,3)).flatten(),m.sumofabsofinit.cuda())
                     else:
                         scores = torch.div(m.scores.sum((1,2,3)).flatten(),m.sumofabsofinit.cuda())
@@ -50,7 +51,7 @@ def get_global_score_threshold(model, prune_rate):
         return -10000
     # YHT modification 
     for n, m in model.named_modules():
-        if hasattr(m, "scores"):
+        if hasattr(m, "scores") and m.prune_rate != 0:
             shape = m.scores.shape
             if all_scores is None:
                 all_scores = tensor([]).to(m.scores.device)
@@ -149,12 +150,34 @@ def unfreeze_model_subnet(model):
 
 def set_model_prune_rate(model, prune_rate):
     print(f"==> Setting prune rate of network to {prune_rate}")
-
+    ind = -1
     for n, m in model.named_modules():
         if hasattr(m, "set_prune_rate"):
-            m.set_prune_rate(prune_rate)
-            print(f"==> Setting prune rate of {n} to {prune_rate}")
+            ind += 1
+            if parser_args.protect is not None:
+                if parser_args.protect == "linear":
+                    if 'linear' in n:
+                        print(f"==> Setting prune rate of {n} to 0")
+                        m.set_prune_rate(0)
+                        continue
+                elif parser_args.protect == "linear_last":
+                    if 'linear' in n and n.split('.')[1] == str(len(model.linear) - 1):
+                        print(f"==> Setting prune rate of {n} to 0")
+                        m.set_prune_rate(0)
+                        continue
+                else:
+                    raise(ValueError)
 
+            if not parser_args.prandom: 
+                m.set_prune_rate(prune_rate)
+                print(f"==> Setting prune rate of {n} to {prune_rate}")
+            else:
+                layer_prune_rate = prune_rate
+                if ind < len(parser_args.prlist):
+                    layer_prune_rate = parser_args.prlist[ind]
+                    print("WARNING: prune rate list length might not be correct")
+                m.set_prune_rate(layer_prune_rate)
+                print(f"==> Setting prune rate of {n} to {layer_prune_rate}")
 
 def accumulate(model, f):
     acc = 0.0

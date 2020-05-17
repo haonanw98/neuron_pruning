@@ -225,8 +225,16 @@ def parse_arguments():
         "--pmode", type=str, default="normal", help="pruning mode, select from normal, channel, filter"
     )
     parser.add_argument(
-        "--pscale", type=str, default="layerwise", help="pruning mode, select from layerwise, global"
+        "--pscale", type=str, default="layerwise", help="pruning scale, select from layerwise, global"
     )
+    parser.add_argument(
+        "--prandom", dest='prandom', action='store_true', help="whether use random prunning"
+    )
+    parser.set_defaults(prandom=False)
+    parser.add_argument(
+        "--prlist", type=float, help="set prlist", nargs='+'
+    )
+    parser.set_defaults(prlist=[])
     parser.add_argument(
         "--score_threshold", type=float, default=0, help="global pruning score threshold"
     )
@@ -236,6 +244,9 @@ def parse_arguments():
     parser.set_defaults(gp_warm_up=False)
     parser.add_argument(
         "--gp_warm_up_epochs", type=int, default=20, help="global pruning protection rate decay"
+    )
+    parser.add_argument(
+        "--protect", type=str, default=None, help="protect which layer"
     )
     # End of WHN modification
     # SJT modification :
