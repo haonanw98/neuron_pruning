@@ -9,40 +9,87 @@ import torch.nn as nn
 import torch.tensor as tensor
 
 from args import args as parser_args
-def print_layerwise_prunerate(model, score_threshold):
-    pass
+import pdb
 
-def select_partial_score(scores, prune_protect_rate):
-    if prune_protect_rate == 0:
-        return scores
-    else:
-        sorted_scores, idx = scores.sort()
-        length = int(scores.numel() * prune_protect_rate)
-    return sorted_scores[ : length]
 
-def get_global_score_threshold(model, prune_rate, prune_protect_rate):
-    all_scores = None
+def print_global_layerwise_prune_rate(model, prune_rate):
+    score_threshold = get_global_score_threshold(model, prune_rate)
+    print("rank_method: ", parser_args.rank_method,
+          ";whether_abs: ", parser_args.whether_abs)
+    print("score_threshold: ", score_threshold)
+    for n, m in model.named_modules():
+        if hasattr(m, "scores") and m.prune_rate != 0:
+            shape = m.scores.shape
+            if parser_args.pmode == "normal":
+                scores = m.scores.abs().flatten()
+                pruned_num = scores[scores <= score_threshold].size()[0]
+                total_num = scores.shape[0]
+                print(n, " pruned: ", pruned_num, " total: ",
+                      total_num, " rate: ", pruned_num / total_num)
+            elif parser_args.pmode == "channel":
+                channel_size = shape[1] * shape[2] * shape[3]
+                if parser_args.rank_method == "absolute":
+                    scores = m.scores.abs().sum((1, 2, 3)).flatten() / channel_size
+                elif parser_args.rank_method == "relevant":
+                    if parser_args.whether_abs == "abs":
+                        scores = torch.div(m.scores.abs().sum(
+                            (1, 2, 3)).flatten(), m.sumofabsofinit.cuda())
+                    else:
+                        scores = torch.div(m.scores.sum(
+                            (1, 2, 3)).flatten(), m.sumofabsofinit.cuda())
+                # print(scores)
+                pruned_num = scores[scores < score_threshold].size()[
+                    0] * channel_size
+                total_num = scores.shape[0] * channel_size
+                print(n, " pruned: ", pruned_num, " total: ",
+                      total_num, " rate: ", pruned_num / total_num)
+        else:
+            print(n)
+
+
+def print_model_scores(model):
     for n, m in model.named_modules():
         if hasattr(m, "scores"):
+            print(n, "scores:", m.scores)
+
+
+def get_global_score_threshold(model, prune_rate):
+    all_scores = None
+    if prune_rate == 0:
+        # YHT modification, since I delete abs, 0 no longer make sense
+        return -10000
+    # YHT modification
+    for n, m in model.named_modules():
+        if hasattr(m, "scores") and m.prune_rate != 0:
             shape = m.scores.shape
             if all_scores is None:
                 all_scores = tensor([]).to(m.scores.device)
-            
-            if parser_args.pmode == "normal":
-                scores = select_partial_score(m.scores.abs().flatten(), args.prune_protect_rate)
-                all_scores = torch.cat([all_scores, scores])
-            
-            elif parser_args.pmode == "channel" or (shape[2] == 1 and shape[3] == 1):
+            if parser_args.rank_method == "absolute":
+                if parser_args.pmode == "normal":
+                    all_scores = torch.cat(
+                        [all_scores, m.scores.abs().flatten()])
+                elif parser_args.pmode == "channel":
+                    channel_size = shape[1] * shape[2] * shape[3]
+                    all_scores = torch.cat(
+                        [all_scores, m.scores.abs().sum((1, 2, 3)).flatten() / channel_size])
+            elif parser_args.rank_method == "relevant":
+                assert parser_args.pmode == "channel", "only channel pmode could use relevant method!"
                 channel_size = shape[1] * shape[2] * shape[3]
-                scores = select_partial_score(m.scores.abs().sum((1, 2, 3)).flatten() / channel_size, prune_protect_rate)
-                all_scores = torch.cat([all_scores, scores])
-            
-            elif parser_args.pmode == "filter":
-                filter_size = shape[2] * shape[3]
-                scores = select_partial_score(m.scores.abs().sum((2, 3)).flatten() / filter_size, prune_protect_rate)
-                all_scores = torch.cat([all_scores, scores]) 
-    return torch.kthvalue(all_scores, int((prune_rate / (1 - prune_protect_rate)) * all_scores.numel())).values.item()
-   
+                # noabs / abs of init
+                if parser_args.whether_abs == "abs":
+                    attach = torch.div(m.scores.abs().sum(
+                        (1, 2, 3)).flatten(), m.sumofabsofinit.cuda())
+                else:
+                    attach = torch.div(m.scores.sum(
+                        (1, 2, 3)).flatten(), m.sumofabsofinit.cuda())
+                all_scores = torch.cat([all_scores, attach])
+            else:
+                print("wrong rank_method! Only absolute and relevant is supported.")
+                raise
+    return torch.kthvalue(all_scores, int(prune_rate * all_scores.numel())).values.item()
+    # End of modification
+
+
 def save_checkpoint(state, is_best, filename="checkpoint.pth", save=False):
     filename = pathlib.Path(filename)
 
@@ -117,11 +164,55 @@ def unfreeze_model_subnet(model):
 
 def set_model_prune_rate(model, prune_rate):
     print(f"==> Setting prune rate of network to {prune_rate}")
-
+    ind = -1
     for n, m in model.named_modules():
         if hasattr(m, "set_prune_rate"):
-            m.set_prune_rate(prune_rate)
-            print(f"==> Setting prune rate of {n} to {prune_rate}")
+            ind += 1
+            if not parser_args.prandom:
+                m.set_prune_rate(prune_rate)
+                print(f"==> Setting prune rate of {n} to {prune_rate}")
+            else:
+                # WHN modification
+                layer_prune_rate = prune_rate
+                if ind < len(parser_args.prlist):
+                    layer_prune_rate = parser_args.prlist[ind]
+                else:
+                    print("WARNING: prune rate list length might not be correct")
+                m.set_prune_rate(layer_prune_rate)
+                print(f"==> Setting prune rate of {n} to {layer_prune_rate}")
+                # End of modification
+
+            if parser_args.protect is not None:
+                if parser_args.protect == "linear":
+                    if 'linear' in n:
+                        print(f"==> Setting prune rate of {n} to 0")
+                        m.set_prune_rate(0)
+                        continue
+                elif parser_args.protect == "linear_last":
+                    # YHT modification
+                    if hasattr(model, 'linear'):
+                        islast = n.split('.')[1] == str(len(model.linear) - 1)
+                    else:
+                        islast = n.split('.')[2] == str(
+                            len(model.module.linear) - 1)
+                    # End of modification
+                    if 'linear' in n and islast:
+                        print(f"==> Setting prune rate of {n} to 0")
+                        m.set_prune_rate(0)
+                        continue
+                else:
+                    raise(ValueError)
+
+
+# YHT modification
+# Remember, We assume that every prune-rate is correct here!
+def make_prandom_mask(model):
+    print(f"Making random fixed mask for each layer!")
+    for n, m in model.named_modules():
+        if hasattr(m, "make_prandom_mask"):
+            m.make_prandom_mask()
+    print(f"Successfully make fixed mask for seed{parser_args.seed}")    
+# End of modification
 
 
 def accumulate(model, f):
@@ -171,5 +262,4 @@ class SubnetL1RegLoss(nn.Module):
                 l1_accum += (p*temperature).sigmoid().sum()
 
         return l1_accum
-
 

@@ -36,8 +36,18 @@ def train(train_loader, model, criterion, optimizer, epoch, args, writer):
         if args.gpu is not None:
             images = images.cuda(args.gpu, non_blocking=True)
 
+
         target = target.cuda(args.gpu, non_blocking=True)
 
+        # YHT modification 
+        '''
+        This will severely influence the generalization! drop this.
+        if args.seed is not None and args.prandom:
+            torch.manual_seed(args.seed)
+            torch.cuda.manual_seed(args.seed)
+            torch.cuda.manual_seed_all(args.seed)
+        '''
+        # End of modification
         # compute output
         output = model(images)
 
@@ -88,6 +98,16 @@ def validate(val_loader, model, criterion, args, writer, epoch):
 
             target = target.cuda(args.gpu, non_blocking=True)
 
+
+            # YHT modification 
+            '''
+            This will severely influence the generalization! drop this.
+            if args.seed is not None and args.prandom:
+                torch.manual_seed(args.seed)
+                torch.cuda.manual_seed(args.seed)
+                torch.cuda.manual_seed_all(args.seed)
+            '''
+            # End of modification
             # compute output
             output = model(images)
 

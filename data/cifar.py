@@ -10,7 +10,6 @@ import numpy as np
 class CIFAR10:
     def __init__(self, args):
         super(CIFAR10, self).__init__()
-
         data_root = os.path.join(args.data, "cifar10")
 
         use_cuda = torch.cuda.is_available()

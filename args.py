@@ -225,16 +225,30 @@ def parse_arguments():
         "--pmode", type=str, default="normal", help="pruning mode, select from normal, channel, filter"
     )
     parser.add_argument(
-        "--pscale", type=str, default="layerwise", help="pruning mode, select from layerwise, global"
+        "--pscale", type=str, default="layerwise", help="pruning scale, select from layerwise, global"
     )
+    parser.add_argument(
+        "--prandom", dest='prandom', action='store_true', help="whether use random prunning"
+    )
+    parser.set_defaults(prandom=False)
+    parser.add_argument(
+        "--prlist", default=None,
+        type=lambda x: [float(a) for a in x.split(",")],
+        help="input your personal prune-rate vector",
+    )
+    parser.set_defaults(prlist=[])
     parser.add_argument(
         "--score_threshold", type=float, default=0, help="global pruning score threshold"
     )
     parser.add_argument(
-        "--prune_protect_rate", type=float, default=0.1, help="global pruning protection"
+        '--gp_warm_up', dest='gp_warm_up', action='store_true'
+    )
+    parser.set_defaults(gp_warm_up=False)
+    parser.add_argument(
+        "--gp_warm_up_epochs", type=int, default=20, help="global pruning protection rate decay"
     )
     parser.add_argument(
-        "--prune_protect_rate_decay", type=float, default=0.01, help="global pruning protection rate decay"
+        "--protect", type=str, default=None, help="protect which layer"
     )
     # End of WHN modification
     # SJT modification :
@@ -242,6 +256,20 @@ def parse_arguments():
         "--exp_mode", help = "experiment mode: pretraining, pruning or finetuning", default = None
     )
     # End of SJT modification
+    # YHT modification:
+    parser.add_argument(
+        '--print_more', dest='print_more', action='store_true'
+    )
+    parser.add_argument(
+        "--score_init", help = "how u init score: kaiming(default), uniform, gaussian", default = "kaiming"
+    )
+    parser.add_argument(
+        "--rank_method", help = "how u rank score: absolute(default) or relevant to init", default = "absolute"
+    )
+    parser.add_argument(
+        "--whether_abs", help = "whether use abs of scores: abs(default) or noabs", default = "abs"
+    )
+    # End of modification
 
     args = parser.parse_args()
 

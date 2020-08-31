@@ -27,7 +27,8 @@ from utils.net_utils import (
     get_lr,
     LabelSmoothing,
     get_global_score_threshold,  # WHN modification
-    print_layerwise_prunerate,   # WHN modification
+    print_global_layerwise_prune_rate, # WHN modification
+    make_prandom_mask, # YHT modification
 )
 from utils.schedulers import get_policy
 
@@ -51,8 +52,10 @@ def main():
         if args.shuffle:
             print("Using shuffle mode without specify argd.seed!")
             return
-    # End of YHT modification
 
+    
+    # End of YHT modification
+    
     # Simply call main_worker function
     main_worker(args)
 
@@ -110,11 +113,24 @@ def main_worker(args):
                     return
                 else:
                     optimizer = resume_finetuning(args,model)
-                    print("#####################DEBUG PRINT : VALIDATE FIRST#####################")
-                    validate(data.val_loader, model, criterion, args, writer= None, epoch=args.start_epoch)
+                    # YHT: not sure whether it is needed
+                    #lr_policy = get_policy(args.lr_policy)(optimizer, args)
+                    #print("#####################DEBUG PRINT : VALIDATE FIRST#####################")
+                    #validate(data.val_loader, model, criterion, args, writer= None, epoch=args.start_epoch)
         else:
             best_acc1 = resume(args,model,optimizer)
         # End of SJT modification
+    else:
+        # YHT modification
+        if args.exp_mode:
+            if args.exp_mode == "finetuning":
+                #here, we suppose the user want to use init prun-rate vector to do the finetuning(subnetwork)
+                print("Using finetuning mode without resume, which is supposed to be innit fientune.")
+                optimizer = resume_finetuning(args,model)
+                # YHT: not sure whether it is needed
+                lr_policy = get_policy(args.lr_policy)(optimizer, args)
+        # End of modification
+
 
     # Data loading code
     if args.evaluate:
@@ -154,39 +170,53 @@ def main_worker(args):
             "best_train_acc5": best_train_acc5,
             "optimizer": optimizer.state_dict(),
             "curr_acc1": acc1 if acc1 else "Not evaluated",
-            "prune-rate": args.prune_rate,
         },
         False,
         filename=ckpt_base_dir / f"initial.state",
         save=False,
     )
 
+    if args.gp_warm_up:
+        record_prune_rate = args.prune_rate
+    if args.print_more:
+        print_global_layerwise_prune_rate(model,args.prune_rate)
+
+    # YHT modification May 20
+    # till here, we have every prune-rate is accurate
+    # Now we need to create mask if prandom is true using 
+    if args.prandom:
+        make_prandom_mask(model)
+    # End of modification
+
+
     # Start training
     for epoch in range(args.start_epoch, args.epochs):
         lr_policy(epoch, iteration=None)
         modifier(args, epoch, model)
-
         cur_lr = get_lr(optimizer)
-
+        if args.print_more:
+            print("In epoch{epoch}, lr = {cur_lr}")
         # train for one epoch
         start_train = time.time()
         # WHN modeification add global pruning
         if args.pscale == "global":
-            assert (args.prune_rate < 1 - args.prune_protect_rate)
-            args.score_threshold = get_global_score_threshold(model, args.prune_rate, args.prune_protect_rate)
-        # end of modification WHN
+            if args.gp_warm_up:
+                if epoch < args.gp_warm_up_epochs:
+                    args.prune_rate = 0
+                else:
+                    args.prune_rate = record_prune_rate
+            if not args.prandom :
+                args.score_threshold = get_global_score_threshold(model, args.prune_rate)
+        
+        # YHT modification
+        if args.print_more:
+            print_global_layerwise_prune_rate(model, args.prune_rate)
+        # End of modification
         
         train_acc1, train_acc5 = train(
             data.train_loader, model, criterion, optimizer, epoch, args, writer=writer
         )
         train_time.update((time.time() - start_train) / 60)
-
-        # WHN modeification add global pruning
-        if args.pscale == "global":
-            print_layerwise_prunerate(model, args.score_threshold)
-            if args.prune_rate > 0:
-                args.prune_protect_rate = max(args.prune_protect_rate - args.prune_protect_rate_decay, 0)
-        # end of modification WHN
 
         # evaluate on validation set
         start_validation = time.time()
@@ -222,7 +252,6 @@ def main_worker(args):
                     "optimizer": optimizer.state_dict(),
                     "curr_acc1": acc1,
                     "curr_acc5": acc5,
-                    "prune-rate": args.prune_rate,
                 },
                 is_best,
                 filename=ckpt_base_dir / f"epoch_{epoch}.state",
@@ -362,39 +391,40 @@ def resume_pruning(args,model):
         
         
 def resume_finetuning(args,model):
-    if os.path.isfile(args.resume):
-        print("############################ WELCOME to the FINETUNING MODE!! ############################")
-        # Load the pretrained model
-        print(f"=> Loading checkpoint '{args.resume}'")
-        checkpoint = torch.load(args.resume, map_location=f"cuda:{args.multigpu[0]}")    
-        model.load_state_dict(checkpoint["state_dict"])
-        # Use the solved prune-rate in the .pth file
-        args.prune_rate = checkpoint["prune-rate"]
-        # Freeze the weights & unfreeze the scores
-        unfreeze_model_weights(model)
-        freeze_model_subnet(model)
-        
-        # Set the pruning rate
-        set_model_prune_rate(model, prune_rate=args.prune_rate) # Don't need to specify the prune_rate
-        
-        # Reset the Optimizer
-        print("Under the pruning setting, the weights/scores' gradient(s) are as follows:")
-        print("You should see that weights are UNFROZEN and scores are FROZEN")
-        print("############################ DEBUG PRINT ############################")
-        
-        #get_optimizer(args,model)
-        print(
-            f"=> Rough estimate model params {sum(int(p.numel() * (1-args.prune_rate)) for n, p in model.named_parameters() if not n.endswith('scores'))}"
-        )
-        print("############################ FINETUNING: EPOCHS = 20 ############################")
-        # Reset the start_epoch and epochs, we use the DEFAULT epochs = 20 this quantity was modified at line76 & line260
-        args.start_epoch = 0 # this quantity was modified at line76 & line260, we use the DEFAULT epochs = 20
-        
-        # Reset the exp-name
-        args.name = args.name + "_finetuning" # Change the exp-name so that the new model can be saved to a new directory
-        model = set_gpu(args,model)
-    else:
-        print(f"=> No checkpoint found at '{args.resume}'")
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("############################ WELCOME to the FINETUNING MODE!! ############################")
+            # Load the pretrained model
+            print(f"=> Loading checkpoint '{args.resume}'")
+            checkpoint = torch.load(args.resume, map_location=f"cuda:{args.multigpu[0]}")    
+            model.load_state_dict(checkpoint["state_dict"])
+        else:
+            print(f"=> No checkpoint found at '{args.resume}'")
+            raise
+
+    # Freeze the weights & unfreeze the scores
+    unfreeze_model_weights(model)
+    freeze_model_subnet(model)
+    
+    # Set the pruning rate
+    set_model_prune_rate(model, prune_rate=args.prune_rate) # Don't need to specify the prune_rate
+    
+    # Reset the Optimizer
+    print("Under the pruning setting, the weights/scores' gradient(s) are as follows:")
+    print("You should see that weights are UNFROZEN and scores are FROZEN")
+    print("############################ DEBUG PRINT ############################")
+    
+    #get_optimizer(args,model)
+    print(
+        f"=> Rough estimate model params {sum(int(p.numel() * (1-args.prune_rate)) for n, p in model.named_parameters() if not n.endswith('scores'))}"
+    )
+    print("############################ FINETUNING: EPOCHS = {} ############################".format(args.epochs))
+    
+    args.start_epoch = 0 # this quantity was modified at line76 & line260, we use the DEFAULT epochs = 20
+    # Reset the exp-name
+    args.name = args.name + "_finetuning" # Change the exp-name so that the new model can be saved to a new directory
+    model = set_gpu(args,model)
+    
     return get_optimizer(args,model)
 # End of SJT modification
 
