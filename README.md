@@ -30,12 +30,7 @@ python main.py --exp_mode finetuning --config configs/our_yml/conv4)globalchanne
 ​		**New usage：**
 
 ​				you can decide which method to use when ranking scores. Default is absolute, which is identical to  hidden's code, simply  calculating the average of weights. The other is relevant, which calculates the ratio of scores with init score. If relevant type is used, then the second command you  could control is whether_abs, which means：
-$$
-\begin{align}
-\text{relevant,abs} &\quad \text{score$_\text{neuron}$} = \frac{\sum |\text{weight score}|}{\sum |\text{init score}|}\\
-\text{relevant,noabs} &\quad \text{score$_\text{neuron}$} = \frac{\sum \text{weight score}}{\sum |\text{init score}|}\\
-\end{align}
-$$
+
 ​		A standard usage is as follows:
 
 **Pretrain** : 
