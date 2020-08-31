@@ -1,8 +1,5 @@
-### Neuron Pruning Specification-ver5
+### Neuron Pruning Specification
 
-Date: May 16th aternoon
-
-注意：random prune后ft的方法在最底下
 
 #### Convenient Usage for Conv4/8
 
